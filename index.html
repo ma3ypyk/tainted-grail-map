@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Карта Авалону</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<script src="map-data.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0c0e14;
+    overflow: hidden;
+    font-family: 'Press Start 2P', monospace;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #wrap {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  svg { width: 100%; height: 100%; touch-action: pan-x pan-y; }
+
+  .edge {
+    stroke: #33415a;
+    stroke-width: 3;
+    stroke-dasharray: 6 5;
+  }
+
+  .node-tile {
+    fill: #26314a;
+    stroke: #4d6086;
+    stroke-width: 2;
+    cursor: pointer;
+  }
+  .node-tile.menhir { fill: #4a3d1f; stroke: #c9a227; }
+  .node-tile.current { fill: #1f4a2e; stroke: #5fce85; stroke-width: 3; }
+  .node-tile:active { fill: #5a7099; }
+
+  .node-label {
+    fill: #dfe6f0;
+    font-size: 18px;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+    user-select: none;
+  }
+  .node-tile.menhir + .node-label { fill: #f4d976; }
+
+  /* Картка деталей локації */
+  #card-overlay {
+    position: fixed; inset: 0;
+    background: rgba(6, 7, 11, 0.82);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 10;
+  }
+  #card-overlay.open { display: flex; }
+  #card {
+    width: min(84vw, 340px);
+    background: #161a24;
+    border: 3px solid #4d6086;
+    padding: 20px 18px;
+    color: #dfe6f0;
+    font-family: 'Press Start 2P', monospace;
+  }
+  #card.menhir { border-color: #c9a227; }
+  #card h2 {
+    font-size: 14px;
+    margin: 0 0 10px;
+    color: #f4d976;
+  }
+  #card .meta {
+    font-size: 10px;
+    line-height: 1.8;
+    color: #8fa3c2;
+    margin-bottom: 18px;
+  }
+  #card .btns { display: flex; gap: 10px; }
+  #card button {
+    flex: 1;
+    font-family: inherit;
+    font-size: 10px;
+    padding: 12px 6px;
+    border: 2px solid #4d6086;
+    background: #26314a;
+    color: #dfe6f0;
+    cursor: pointer;
+  }
+  #card button#btn-travel {
+    border-color: #5fce85;
+    background: #1f4a2e;
+  }
+  #card button#btn-travel:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+</style>
+</head>
+<body>
+<div id="wrap"><svg id="map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg></div>
+
+<div id="card-overlay">
+  <div id="card">
+    <h2 id="card-title">Локація</h2>
+    <div class="meta" id="card-meta"></div>
+    <div class="btns">
+      <button id="btn-back">Назад</button>
+      <button id="btn-travel">Подорож</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { tg.ready(); tg.expand(); }
+
+  const params = new URLSearchParams(location.search);
+  const startParam = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || params.get("loc");
+  const currentLocation = startParam ? parseInt(startParam, 10) : 101;
+
+  const CELL = 100;
+  const PAD = 60;
+  const TILE = 46;
+
+  const cols = Object.values(MAP_GRID).map(p => p[0]);
+  const rows = Object.values(MAP_GRID).map(p => p[1]);
+  const maxCol = Math.max(...cols), maxRow = Math.max(...rows);
+  const width = PAD * 2 + maxCol * CELL;
+  const height = PAD * 2 + maxRow * CELL;
+
+  const svg = document.getElementById("map");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  function pos(id) {
+    const [c, r] = MAP_GRID[id];
+    return [PAD + c * CELL, PAD + r * CELL];
+  }
+
+  const ns = "http://www.w3.org/2000/svg";
+  function el(tag, attrs) {
+    const e = document.createElementNS(ns, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // Ребра (уже прохідні дороги — стіни вирахувані заздалегідь у map-data.js)
+  MAP_EDGES.forEach(([a, b]) => {
+    if (!MAP_GRID[a] || !MAP_GRID[b]) return;
+    const [x1, y1] = pos(a);
+    const [x2, y2] = pos(b);
+    svg.appendChild(el("line", { class: "edge", x1, y1, x2, y2 }));
+  });
+
+  const reachable = new Set();
+  MAP_EDGES.forEach(([a, b]) => {
+    if (a === currentLocation) reachable.add(b);
+    if (b === currentLocation) reachable.add(a);
+  });
+
+  Object.keys(MAP_GRID).forEach(idStr => {
+    const id = parseInt(idStr, 10);
+    const [x, y] = pos(id);
+    const isMenhir = MAP_MENHIRS.has(id);
+    const isCurrent = id === currentLocation;
+
+    const g = el("g", {});
+    const rect = el("rect", {
+      x: x - TILE / 2, y: y - TILE / 2, width: TILE, height: TILE,
+      class: "node-tile" + (isMenhir ? " menhir" : "") + (isCurrent ? " current" : ""),
+    });
+    g.appendChild(rect);
+    const label = el("text", { class: "node-label", x, y });
+    label.textContent = id;
+    g.appendChild(label);
+
+    rect.style.opacity = (reachable.has(id) || isCurrent) ? "1" : "0.35";
+
+    g.addEventListener("click", () => openCard(id, isCurrent, isMenhir, reachable.has(id)));
+    svg.appendChild(g);
+  });
+
+  // Картка локації
+  const overlay = document.getElementById("card-overlay");
+  const card = document.getElementById("card");
+  const cardTitle = document.getElementById("card-title");
+  const cardMeta = document.getElementById("card-meta");
+  const btnTravel = document.getElementById("btn-travel");
+  const btnBack = document.getElementById("btn-back");
+
+  function openCard(id, isCurrent, isMenhir, isReachable) {
+    const name = (MAP_NAMES[id] || ("Локація " + id));
+    cardTitle.textContent = name;
+    card.classList.toggle("menhir", isMenhir);
+    const lines = [];
+    lines.push(isMenhir ? "🔥 Тут є Менгір" : "Звичайна місцевість");
+    if (isCurrent) lines.push("Ти тут зараз.");
+    else if (!isReachable) lines.push("Немає прямого шляху звідси.");
+    cardMeta.innerHTML = lines.join("<br>");
+
+    btnTravel.disabled = isCurrent || !isReachable;
+    btnTravel.textContent = isCurrent ? "Ти тут" : "Подорож";
+    btnTravel.onclick = () => {
+      if (btnTravel.disabled) return;
+      if (tg) {
+        tg.sendData(JSON.stringify({ location_id: id }));
+        tg.close();
+      } else {
+        console.log("Обрано локацію:", id);
+        closeCard();
+      }
+    };
+    overlay.classList.add("open");
+  }
+
+  function closeCard() {
+    overlay.classList.remove("open");
+  }
+
+  btnBack.addEventListener("click", closeCard);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeCard(); });
+})();
+</script>
+</body>
+</html>
