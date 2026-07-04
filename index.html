@@ -36,6 +36,8 @@
     cursor: pointer;
   }
   .node-tile.menhir { fill: #4a3d1f; stroke: #c9a227; }
+  .node-tile.illuminated { fill: #6b5a45; stroke: #8a7357; }
+  .node-tile.fog { fill: #3a3a3a; stroke: #6e6e6e; }
   .node-tile.current { fill: #1f4a2e; stroke: #5fce85; stroke-width: 3; }
   .node-tile:active { fill: #5a7099; }
 
@@ -48,6 +50,7 @@
     user-select: none;
   }
   .node-tile.menhir + .node-label { fill: #f4d976; }
+  .node-tile.fog + .node-label { fill: #cfcfcf; }
 
   /* Картка деталей локації */
   #card-overlay {
@@ -161,16 +164,41 @@
     if (b === currentLocation) reachable.add(a);
   });
 
+  // Освітлення: кожен активний Менгір освітлює квадрат 3x3 навколо себе
+  // (діагоналі теж входять — це зона видимості, а не шлях руху).
+  const gridToId = {};
+  Object.entries(MAP_GRID).forEach(([id, [c, r]]) => { gridToId[c + "," + r] = parseInt(id, 10); });
+
+  const litIds = new Set();
+  ACTIVE_MENHIRS.forEach(m => {
+    const [mc, mr] = MAP_GRID[m];
+    for (let dc = -1; dc <= 1; dc++) {
+      for (let dr = -1; dr <= 1; dr++) {
+        const nb = gridToId[(mc + dc) + "," + (mr + dr)];
+        if (nb !== undefined) litIds.add(nb);
+      }
+    }
+  });
+
   Object.keys(MAP_GRID).forEach(idStr => {
     const id = parseInt(idStr, 10);
     const [x, y] = pos(id);
     const isMenhir = MAP_MENHIRS.has(id);
+    const isActiveMenhir = ACTIVE_MENHIRS.has(id);
     const isCurrent = id === currentLocation;
+    const isFog = isMenhir ? !isActiveMenhir : !litIds.has(id);
+    const isIlluminated = !isMenhir && !isFog;
+
+    let cls = "node-tile";
+    if (isMenhir && isActiveMenhir) cls += " menhir";
+    else if (isFog) cls += " fog";
+    else if (isIlluminated) cls += " illuminated";
+    if (isCurrent) cls += " current";
 
     const g = el("g", {});
     const rect = el("rect", {
       x: x - TILE / 2, y: y - TILE / 2, width: TILE, height: TILE,
-      class: "node-tile" + (isMenhir ? " menhir" : "") + (isCurrent ? " current" : ""),
+      class: cls,
     });
     g.appendChild(rect);
     const label = el("text", { class: "node-label", x, y });
@@ -179,7 +207,7 @@
 
     rect.style.opacity = (reachable.has(id) || isCurrent) ? "1" : "0.35";
 
-    g.addEventListener("click", () => openCard(id, isCurrent, isMenhir, reachable.has(id)));
+    g.addEventListener("click", () => openCard(id, isCurrent, isMenhir, isActiveMenhir, isFog, reachable.has(id)));
     svg.appendChild(g);
   });
 
@@ -191,12 +219,14 @@
   const btnTravel = document.getElementById("btn-travel");
   const btnBack = document.getElementById("btn-back");
 
-  function openCard(id, isCurrent, isMenhir, isReachable) {
+  function openCard(id, isCurrent, isMenhir, isActiveMenhir, isFog, isReachable) {
     const name = (MAP_NAMES[id] || ("Локація " + id));
     cardTitle.textContent = name;
-    card.classList.toggle("menhir", isMenhir);
+    card.classList.toggle("menhir", isMenhir && isActiveMenhir);
     const lines = [];
-    lines.push(isMenhir ? "🔥 Тут є Менгір" : "Звичайна місцевість");
+    if (isMenhir) lines.push(isActiveMenhir ? "🔥 Тут горить Менгір" : "💀 Менгір тут згас");
+    else if (isFog) lines.push("🌫️ Огорнуто Туманом");
+    else lines.push("☀️ Осяяно сусіднім Менгіром");
     if (isCurrent) lines.push("Ти тут зараз.");
     else if (!isReachable) lines.push("Немає прямого шляху звідси.");
     cardMeta.innerHTML = lines.join("<br>");
