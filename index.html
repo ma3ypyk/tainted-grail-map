@@ -6,7 +6,7 @@
 <title>Карта Авалону</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
 <script src="map-data.js"></script>
 <style>
   * { box-sizing: border-box; }
@@ -27,6 +27,11 @@
     stroke: #33415a;
     stroke-width: 3;
     stroke-dasharray: 6 5;
+  }
+  .route-line {
+    stroke: #ffffff;
+    stroke-width: 4;
+    stroke-linecap: round;
   }
 
   .node-tile {
@@ -62,54 +67,144 @@
   }
   .node-tile.menhir + .node-label { fill: #f4d976; }
 
-  /* Картка деталей локації */
+  /* Картка локації — у стилі оригінальної гри: арка з назвою, стрілки
+     сусідів по сторонах, дія знизу, флейвор-текст курсивом. Наразі все на
+     плейсхолдер-контенті. */
   #card-overlay {
     position: fixed; inset: 0;
     background: rgba(6, 7, 11, 0.82);
     display: none;
     align-items: center; justify-content: center;
     z-index: 10;
+    font-family: 'IM Fell English', serif;
   }
   #card-overlay.open { display: flex; }
+
   #card {
-    width: min(84vw, 340px);
-    background: #161a24;
-    border: 3px solid #4d6086;
-    padding: 20px 18px;
-    color: #dfe6f0;
+    width: min(88vw, 360px);
+    aspect-ratio: 5 / 7;
+    position: relative;
+    background: radial-gradient(ellipse at 50% 30%, #4a5a3a 0%, #2c3620 55%, #161d10 100%);
+    border: 4px solid #2a2015;
+    border-radius: 6px;
+    box-shadow: 0 0 0 2px #7a6a3f, 0 10px 30px rgba(0,0,0,0.6);
+    color: #e9e0c8;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card-nav {
+    position: absolute;
     font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    color: #e9e0c8;
+    text-shadow: 0 2px 3px rgba(0,0,0,0.8);
+    cursor: pointer;
+    padding: 4px 8px;
+    user-select: none;
   }
-  #card.menhir { border-color: #c9a227; }
-  #card h2 {
-    font-size: 14px;
-    margin: 0 0 10px;
+  .card-nav.dim { opacity: 0.3; cursor: default; }
+  #nav-up    { top: 4%;  left: 50%; transform: translateX(-50%); }
+  #nav-down  { bottom: 4%; left: 50%; transform: translateX(-50%); }
+  #nav-left  { top: 50%; left: 3%;  transform: translateY(-50%); }
+  #nav-right { top: 50%; right: 3%; transform: translateY(-50%); }
+
+  #card-titlebar {
+    margin: 15% auto 0;
+    width: 78%;
+    text-align: center;
+    z-index: 2;
+  }
+  #card-id {
+    display: inline-block;
+    background: #201a10;
+    border: 2px solid #7a6a3f;
+    border-radius: 12px;
+    padding: 2px 14px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
     color: #f4d976;
+    margin-bottom: 6px;
   }
-  #card .meta {
-    font-size: 10px;
-    line-height: 1.8;
-    color: #8fa3c2;
-    margin-bottom: 18px;
+  #card-name {
+    font-family: 'IM Fell English SC', serif;
+    font-size: 26px;
+    letter-spacing: 1px;
+    color: #f3ecd4;
+    border-top: 1px solid #7a6a3f;
+    border-bottom: 1px solid #7a6a3f;
+    padding: 6px 0;
   }
-  #card .btns { display: flex; gap: 10px; }
-  #card button {
+
+  #card-icons {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 8px;
+    z-index: 2;
+  }
+  #card-icons span {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: #201a10;
+    border: 2px solid #7a6a3f;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+  }
+
+  #card-body {
     flex: 1;
-    font-family: inherit;
-    font-size: 10px;
-    padding: 12px 6px;
-    border: 2px solid #4d6086;
-    background: #26314a;
-    color: #dfe6f0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 0 9% 6%;
+    z-index: 2;
+  }
+
+  #card-action {
+    background: rgba(10, 12, 8, 0.72);
+    border: 1px solid #7a6a3f;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    line-height: 1.6;
+    color: #f4d976;
+    margin-bottom: 10px;
+  }
+  #card-action .cost { color: #8fce6f; }
+
+  #card-status {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    color: #cfd8e6;
+    margin-bottom: 10px;
+    line-height: 1.7;
+  }
+
+  #card-flavor {
+    font-style: italic;
+    font-size: 15px;
+    color: #cdbf9a;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  #card-btns { display: flex; gap: 10px; }
+  #card-btns button {
+    flex: 1;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    padding: 10px 4px;
+    border: 2px solid #7a6a3f;
+    border-radius: 4px;
+    background: #201a10;
+    color: #e9e0c8;
     cursor: pointer;
   }
-  #card button#btn-travel {
-    border-color: #5fce85;
-    background: #1f4a2e;
-  }
-  #card button#btn-travel:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
+  #btn-travel { border-color: #6fce85; background: #16321f; }
+  #btn-travel:disabled { opacity: 0.4; cursor: default; }
 </style>
 </head>
 <body>
@@ -117,11 +212,25 @@
 
 <div id="card-overlay">
   <div id="card">
-    <h2 id="card-title">Локація</h2>
-    <div class="meta" id="card-meta"></div>
-    <div class="btns">
-      <button id="btn-back">Назад</button>
-      <button id="btn-travel">Подорож</button>
+    <div class="card-nav" id="nav-up">^</div>
+    <div class="card-nav" id="nav-down">v</div>
+    <div class="card-nav" id="nav-left">&lt;</div>
+    <div class="card-nav" id="nav-right">&gt;</div>
+
+    <div id="card-titlebar">
+      <div id="card-id">101</div>
+      <div id="card-name">Локація</div>
+    </div>
+    <div id="card-icons"><span>👁</span><span>⛺</span><span>🕯</span></div>
+
+    <div id="card-body">
+      <div id="card-status"></div>
+      <div id="card-action"></div>
+      <div id="card-flavor"></div>
+      <div id="card-btns">
+        <button id="btn-back">Назад</button>
+        <button id="btn-travel">Подорож</button>
+      </div>
     </div>
   </div>
 </div>
@@ -160,6 +269,40 @@
     return e;
   }
 
+  // --- Граф сусідства + BFS найкоротший шлях ---
+  const adjacency = {};
+  MAP_EDGES.forEach(([a, b]) => {
+    (adjacency[a] = adjacency[a] || new Set()).add(b);
+    (adjacency[b] = adjacency[b] || new Set()).add(a);
+  });
+
+  function findPath(start, end) {
+    if (start === end) return [start];
+    if (!adjacency[start] || !adjacency[end]) return null;
+    const visited = new Set([start]);
+    const queue = [[start]];
+    while (queue.length) {
+      const path = queue.shift();
+      const node = path[path.length - 1];
+      for (const neighbor of adjacency[node] || []) {
+        if (neighbor === end) return [...path, neighbor];
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push([...path, neighbor]);
+        }
+      }
+    }
+    return null;
+  }
+
+  const gridToId = {};
+  Object.entries(MAP_GRID).forEach(([id, [c, r]]) => { gridToId[c + "," + r] = parseInt(id, 10); });
+
+  function neighborInDirection(id, dc, dr) {
+    const [c, r] = MAP_GRID[id];
+    return gridToId[(c + dc) + "," + (r + dr)];
+  }
+
   // Ребра (уже прохідні дороги — стіни вирахувані заздалегідь у map-data.js)
   MAP_EDGES.forEach(([a, b]) => {
     if (!MAP_GRID[a] || !MAP_GRID[b]) return;
@@ -168,11 +311,10 @@
     svg.appendChild(el("line", { class: "edge", x1, y1, x2, y2 }));
   });
 
-  const reachable = new Set();
-  MAP_EDGES.forEach(([a, b]) => {
-    if (a === currentLocation) reachable.add(b);
-    if (b === currentLocation) reachable.add(a);
-  });
+  const routeGroup = el("g", { id: "route-group" });
+  svg.appendChild(routeGroup);
+
+  const reachable = adjacency[currentLocation] || new Set();
 
   // Хаб (101) і його периметр 3x3 завжди активні — це безпечна база, ніколи
   // не гасне, навіть коли з'явиться справжня механіка палива.
@@ -182,9 +324,6 @@
 
   // Освітлення: кожен активний Менгір освітлює квадрат 3x3 навколо себе
   // (діагоналі теж входять — це зона видимості, а не шлях руху).
-  const gridToId = {};
-  Object.entries(MAP_GRID).forEach(([id, [c, r]]) => { gridToId[c + "," + r] = parseInt(id, 10); });
-
   const litIds = new Set();
   effectiveActiveMenhirs.forEach(m => {
     const [mc, mr] = MAP_GRID[m];
@@ -204,7 +343,7 @@
     const isCurrent = id === currentLocation;
     const isFog = isMenhir ? !isActiveMenhir : !litIds.has(id);
     const isIlluminated = !isMenhir && !isFog;
-    const isReachable = reachable.has(id);
+    const isDirectNeighbor = reachable.has(id);
 
     const g = el("g", {});
 
@@ -213,14 +352,14 @@
       const fogSize = TILE * 0.6;
       const rect = el("rect", {
         x: x - fogSize / 2, y: y - fogSize / 2, width: fogSize, height: fogSize,
-        class: "fog-tile" + (isReachable ? " reachable" : ""),
+        class: "fog-tile" + (isDirectNeighbor ? " reachable" : ""),
       });
       g.appendChild(rect);
     } else {
       let cls = "node-tile";
       if (isMenhir) cls += " menhir";
       else if (isIlluminated) cls += " illuminated";
-      if (isReachable) cls += " reachable";
+      if (isDirectNeighbor) cls += " reachable";
 
       const rect = el("rect", {
         x: x - TILE / 2, y: y - TILE / 2, width: TILE, height: TILE,
@@ -236,29 +375,80 @@
       g.appendChild(el("circle", { class: "current-dot", cx: x, cy: y, r: 9 }));
     }
 
-    g.addEventListener("click", () => openCard(id, isCurrent, isMenhir, isActiveMenhir, isFog, isReachable));
+    g.addEventListener("click", () => openCard(id));
     svg.appendChild(g);
   });
 
-  // Картка локації
+  function drawRoute(path) {
+    routeGroup.innerHTML = "";
+    if (!path || path.length < 2) return;
+    for (let i = 0; i < path.length - 1; i++) {
+      const [x1, y1] = pos(path[i]);
+      const [x2, y2] = pos(path[i + 1]);
+      routeGroup.appendChild(el("line", { class: "route-line", x1, y1, x2, y2 }));
+    }
+  }
+
+  // --- Картка локації ---
   const overlay = document.getElementById("card-overlay");
-  const card = document.getElementById("card");
-  const cardTitle = document.getElementById("card-title");
-  const cardMeta = document.getElementById("card-meta");
+  const cardId = document.getElementById("card-id");
+  const cardName = document.getElementById("card-name");
+  const cardStatus = document.getElementById("card-status");
+  const cardAction = document.getElementById("card-action");
+  const cardFlavor = document.getElementById("card-flavor");
   const btnTravel = document.getElementById("btn-travel");
   const btnBack = document.getElementById("btn-back");
+  const navEls = {
+    up: document.getElementById("nav-up"),
+    down: document.getElementById("nav-down"),
+    left: document.getElementById("nav-left"),
+    right: document.getElementById("nav-right"),
+  };
 
-  function openCard(id, isCurrent, isMenhir, isActiveMenhir, isFog, isReachable) {
-    const name = (MAP_NAMES[id] || ("Локація " + id));
-    cardTitle.textContent = name;
-    card.classList.toggle("menhir", isMenhir && isActiveMenhir);
-    const lines = [];
-    if (isMenhir) lines.push(isActiveMenhir ? "🔥 Тут горить Менгір" : "💀 Менгір тут згас");
-    else if (isFog) lines.push("🌫️ Огорнуто Туманом");
-    else lines.push("☀️ Осяяно сусіднім Менгіром");
-    if (isCurrent) lines.push("Ти тут зараз.");
-    else if (!isReachable) lines.push("Немає прямого шляху звідси.");
-    cardMeta.innerHTML = lines.join("<br>");
+  function openCard(id) {
+    const isMenhir = MAP_MENHIRS.has(id);
+    const isActiveMenhir = effectiveActiveMenhirs.has(id);
+    const isCurrent = id === currentLocation;
+    const isFog = isMenhir ? !isActiveMenhir : !litIds.has(id);
+    const path = findPath(currentLocation, id);
+    const isReachable = path !== null;
+
+    cardId.textContent = id;
+    cardName.textContent = MAP_NAMES[id] || ("Локація " + id);
+
+    const statusLines = [];
+    if (isMenhir) statusLines.push(isActiveMenhir ? "🔥 Тут горить Менгір" : "💀 Менгір тут згас");
+    else if (isFog) statusLines.push("🌫️ Огорнуто Туманом");
+    else statusLines.push("☀️ Осяяно сусіднім Менгіром");
+    if (isCurrent) statusLines.push("Ти тут зараз.");
+    else if (!isReachable) statusLines.push("Шляху звідси немає.");
+    else if (path.length > 2) statusLines.push(`Шлях: ${path.length - 1} кроків`);
+    cardStatus.innerHTML = statusLines.join("<br>");
+
+    cardAction.innerHTML = '<span class="cost">1⚡</span> Плейсхолдер дії локації';
+    cardFlavor.textContent = "«Ще нема опису цього місця в Тумані.»";
+
+    // Стрілки сусідів (за напрямком сітки, як у оригінальній грі)
+    const dirs = {
+      up: neighborInDirection(id, 0, -1),
+      down: neighborInDirection(id, 0, 1),
+      left: neighborInDirection(id, -1, 0),
+      right: neighborInDirection(id, 1, 0),
+    };
+    Object.entries(dirs).forEach(([dir, nb]) => {
+      const el2 = navEls[dir];
+      if (nb === undefined) {
+        el2.textContent = "";
+        el2.classList.add("dim");
+      } else {
+        const arrow = { up: "^", down: "v", left: "<", right: ">" }[dir];
+        el2.textContent = dir === "left" || dir === "right"
+          ? (dir === "left" ? `${arrow} ${nb}` : `${nb} ${arrow}`)
+          : `${arrow}\n${nb}`;
+        el2.classList.remove("dim");
+        el2.onclick = () => openCard(nb);
+      }
+    });
 
     btnTravel.disabled = isCurrent || !isReachable;
     btnTravel.textContent = isCurrent ? "Ти тут" : "Подорож";
@@ -268,10 +458,12 @@
         tg.sendData(JSON.stringify({ location_id: id }));
         tg.close();
       } else {
-        console.log("Обрано локацію:", id);
+        console.log("Обрано локацію:", id, "шлях:", path);
         closeCard();
       }
     };
+
+    drawRoute(isReachable ? path : null);
     overlay.classList.add("open");
   }
 
