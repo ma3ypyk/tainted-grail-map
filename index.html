@@ -37,9 +37,20 @@
   }
   .node-tile.menhir { fill: #4a3d1f; stroke: #c9a227; }
   .node-tile.illuminated { fill: #6b5a45; stroke: #8a7357; }
-  .node-tile.fog { fill: #3a3a3a; stroke: #6e6e6e; }
-  .node-tile.current { fill: #1f4a2e; stroke: #5fce85; stroke-width: 3; }
+  .node-tile.reachable { stroke: #4d9fff; stroke-width: 3; }
   .node-tile:active { fill: #5a7099; }
+
+  .fog-tile {
+    fill: #f2f2f2;
+    stroke: #9a9a9a;
+    stroke-width: 2;
+    cursor: pointer;
+  }
+
+  .current-dot {
+    fill: #4d9fff;
+    pointer-events: none;
+  }
 
   .node-label {
     fill: #dfe6f0;
@@ -50,7 +61,6 @@
     user-select: none;
   }
   .node-tile.menhir + .node-label { fill: #f4d976; }
-  .node-tile.fog + .node-label { fill: #cfcfcf; }
 
   /* Картка деталей локації */
   #card-overlay {
@@ -164,13 +174,19 @@
     if (b === currentLocation) reachable.add(a);
   });
 
+  // Хаб (101) і його периметр 3x3 завжди активні — це безпечна база, ніколи
+  // не гасне, навіть коли з'явиться справжня механіка палива.
+  const HUB_ID = 101;
+  const effectiveActiveMenhirs = new Set(ACTIVE_MENHIRS);
+  effectiveActiveMenhirs.add(HUB_ID);
+
   // Освітлення: кожен активний Менгір освітлює квадрат 3x3 навколо себе
   // (діагоналі теж входять — це зона видимості, а не шлях руху).
   const gridToId = {};
   Object.entries(MAP_GRID).forEach(([id, [c, r]]) => { gridToId[c + "," + r] = parseInt(id, 10); });
 
   const litIds = new Set();
-  ACTIVE_MENHIRS.forEach(m => {
+  effectiveActiveMenhirs.forEach(m => {
     const [mc, mr] = MAP_GRID[m];
     for (let dc = -1; dc <= 1; dc++) {
       for (let dr = -1; dr <= 1; dr++) {
@@ -184,30 +200,43 @@
     const id = parseInt(idStr, 10);
     const [x, y] = pos(id);
     const isMenhir = MAP_MENHIRS.has(id);
-    const isActiveMenhir = ACTIVE_MENHIRS.has(id);
+    const isActiveMenhir = effectiveActiveMenhirs.has(id);
     const isCurrent = id === currentLocation;
     const isFog = isMenhir ? !isActiveMenhir : !litIds.has(id);
     const isIlluminated = !isMenhir && !isFog;
-
-    let cls = "node-tile";
-    if (isMenhir && isActiveMenhir) cls += " menhir";
-    else if (isFog) cls += " fog";
-    else if (isIlluminated) cls += " illuminated";
-    if (isCurrent) cls += " current";
+    const isReachable = reachable.has(id);
 
     const g = el("g", {});
-    const rect = el("rect", {
-      x: x - TILE / 2, y: y - TILE / 2, width: TILE, height: TILE,
-      class: cls,
-    });
-    g.appendChild(rect);
-    const label = el("text", { class: "node-label", x, y });
-    label.textContent = id;
-    g.appendChild(label);
 
-    rect.style.opacity = (reachable.has(id) || isCurrent) ? "1" : "0.35";
+    if (isFog) {
+      // Локації в тумані: менший, порожній квадратик без номера.
+      const fogSize = TILE * 0.6;
+      const rect = el("rect", {
+        x: x - fogSize / 2, y: y - fogSize / 2, width: fogSize, height: fogSize,
+        class: "fog-tile" + (isReachable ? " reachable" : ""),
+      });
+      g.appendChild(rect);
+    } else {
+      let cls = "node-tile";
+      if (isMenhir) cls += " menhir";
+      else if (isIlluminated) cls += " illuminated";
+      if (isReachable) cls += " reachable";
 
-    g.addEventListener("click", () => openCard(id, isCurrent, isMenhir, isActiveMenhir, isFog, reachable.has(id)));
+      const rect = el("rect", {
+        x: x - TILE / 2, y: y - TILE / 2, width: TILE, height: TILE,
+        class: cls,
+      });
+      g.appendChild(rect);
+      const label = el("text", { class: "node-label", x, y });
+      label.textContent = id;
+      g.appendChild(label);
+    }
+
+    if (isCurrent) {
+      g.appendChild(el("circle", { class: "current-dot", cx: x, cy: y, r: 9 }));
+    }
+
+    g.addEventListener("click", () => openCard(id, isCurrent, isMenhir, isActiveMenhir, isFog, isReachable));
     svg.appendChild(g);
   });
 
