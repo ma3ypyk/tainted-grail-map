@@ -346,6 +346,21 @@
     return el("circle", { class: "status-dot " + extraClass, cx, cy, r: DOT_R });
   }
 
+  // Двоколірний індикатор для локацій, де є ОБИДВІ дії (активна + пасивна) —
+  // ліва половина зелена, права сіра.
+  function bicolorDot(cx, cy, colorLeft, colorRight) {
+    const g2 = el("g", { class: "status-dot" });
+    g2.appendChild(el("path", {
+      d: `M ${cx},${cy - DOT_R} A ${DOT_R},${DOT_R} 0 0 0 ${cx},${cy + DOT_R} Z`,
+      fill: colorLeft,
+    }));
+    g2.appendChild(el("path", {
+      d: `M ${cx},${cy - DOT_R} A ${DOT_R},${DOT_R} 0 0 1 ${cx},${cy + DOT_R} Z`,
+      fill: colorRight,
+    }));
+    return g2;
+  }
+
   Object.keys(MAP_GRID).forEach(idStr => {
     const id = parseInt(idStr, 10);
     const [x, y] = pos(id);
@@ -393,9 +408,13 @@
       const botY = y + TILE / 2 - TILE * 0.14;
 
       const action = MAP_ACTIONS[id];
-      const actionCls = action === "active" ? "dot-action-active"
-        : action === "passive" ? "dot-action-passive" : null;
-      g.appendChild(statusDot(dotXs[0], botY, actionCls));
+      if (action === "both") {
+        g.appendChild(bicolorDot(dotXs[0], botY, "#4caf50", "#8a8a8a"));
+      } else {
+        const actionCls = action === "active" ? "dot-action-active"
+          : action === "passive" ? "dot-action-passive" : null;
+        g.appendChild(statusDot(dotXs[0], botY, actionCls));
+      }
 
       g.appendChild(statusDot(dotXs[1], botY, isCurrent ? "dot-player" : null));
 
