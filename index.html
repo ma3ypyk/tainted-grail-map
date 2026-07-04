@@ -41,6 +41,7 @@
     cursor: pointer;
   }
   .node-tile.reachable { stroke: #4d9fff; stroke-width: 3; }
+  .node-tile.current-location { stroke: #d64545; stroke-width: 4; }
   .node-tile:active { fill: #dfe6f0; }
 
   .fog-tile {
@@ -49,6 +50,7 @@
     stroke-width: 2;
     cursor: pointer;
   }
+  .fog-tile.current-location { stroke: #d64545; stroke-width: 3; }
 
   .node-label {
     fill: #1c2230;
@@ -254,6 +256,12 @@
     discoveredParam.split(",").map(s => parseInt(s, 10)).filter(n => !isNaN(n))
   );
 
+  // Локації, де зараз перебувають ІНШІ гравці (не поточний).
+  const playersParam = params.get("players") || "";
+  const otherPlayersIds = new Set(
+    playersParam.split(",").map(s => parseInt(s, 10)).filter(n => !isNaN(n))
+  );
+
   const CELL = 120;
   const PAD = 70;
   const TILE = 82;
@@ -381,17 +389,21 @@
 
     const g = el("g", {});
 
+    // Власна позиція гравця — червоний контур плитки (пріоритетніший за
+    // синій контур "досяжно").
+    const tileStateCls = isCurrent ? " current-location" : (isDirectNeighbor ? " reachable" : "");
+
     if (isFog) {
       // Локації в тумані: менший, порожній квадратик без номера.
       const rect = el("rect", {
         x: x - FOG_TILE / 2, y: y - FOG_TILE / 2, width: FOG_TILE, height: FOG_TILE,
-        class: "fog-tile" + (isDirectNeighbor ? " reachable" : ""),
+        class: "fog-tile" + tileStateCls,
       });
       g.appendChild(rect);
     } else {
       const rect = el("rect", {
         x: x - TILE / 2, y: y - TILE / 2, width: TILE, height: TILE,
-        class: "node-tile" + (isDirectNeighbor ? " reachable" : ""),
+        class: "node-tile" + tileStateCls,
       });
       g.appendChild(rect);
 
@@ -413,7 +425,7 @@
 
       g.appendChild(statusDot(dotXs[2], topY, isMenhir ? "dot-menhir" : null));
 
-      // Нижній ряд: Дія (зелена/сіра) · Гравець тут (синій) · Міні-бос тут (червоний).
+      // Нижній ряд: Дія (зелена/сіра) · Інші гравці тут (синій) · Міні-бос тут (червоний).
       const botY = y + TILE / 2 - TILE * 0.14;
 
       const action = MAP_ACTIONS[id];
@@ -425,7 +437,7 @@
         g.appendChild(statusDot(dotXs[0], botY, actionCls));
       }
 
-      g.appendChild(statusDot(dotXs[1], botY, isCurrent ? "dot-player" : null));
+      g.appendChild(statusDot(dotXs[1], botY, otherPlayersIds.has(id) ? "dot-player" : null));
 
       g.appendChild(statusDot(dotXs[2], botY, MAP_MINIBOSS_LOCATION === id ? "dot-miniboss" : null));
     }
