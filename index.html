@@ -247,6 +247,13 @@
   const startParam = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || params.get("loc");
   const currentLocation = startParam ? parseInt(startParam, 10) : 101;
 
+  // Локації, відкриті з туману рухом гравця (окремо від освітлення Менгіром).
+  // Приходять від бота як список id через кому.
+  const discoveredParam = params.get("discovered") || "";
+  const discoveredIds = new Set(
+    discoveredParam.split(",").map(s => parseInt(s, 10)).filter(n => !isNaN(n))
+  );
+
   const CELL = 120;
   const PAD = 70;
   const TILE = 82;
@@ -367,7 +374,9 @@
     const isMenhir = MAP_MENHIRS.has(id);
     const isActiveMenhir = effectiveActiveMenhirs.has(id);
     const isCurrent = id === currentLocation;
-    const isFog = isMenhir ? !isActiveMenhir : !litIds.has(id);
+    // Відкрито або освітленням активного Менгіра (з діагоналями), або тим,
+    // що гравець фізично туди доходив (лише X/Y, накопичувально).
+    const isFog = !litIds.has(id) && !discoveredIds.has(id);
     const isDirectNeighbor = reachable.has(id);
 
     const g = el("g", {});
@@ -455,7 +464,7 @@
     const isMenhir = MAP_MENHIRS.has(id);
     const isActiveMenhir = effectiveActiveMenhirs.has(id);
     const isCurrent = id === currentLocation;
-    const isFog = isMenhir ? !isActiveMenhir : !litIds.has(id);
+    const isFog = !litIds.has(id) && !discoveredIds.has(id);
     const path = findPath(currentLocation, id);
     const isReachable = path !== null;
 
